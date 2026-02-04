@@ -13,8 +13,5 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
 
         if data:
             commands = data.decode()
-            commands = commands.split("\n")
-            commands.pop()
-            commands = [s.split() for s in commands]
-            for chain in commands:
-                print(chain)
+            commands = commands.split(" ")
+            print(commands)

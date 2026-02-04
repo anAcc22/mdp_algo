@@ -47,13 +47,18 @@ will be displayed on the left panel.
 
 ### Instructions
 
-There are five kinds of basic instructions:
+There are ten kinds of basic instructions:
 
 - `F<x>` (move forward by `x` cm)
 - `B<x>` (move backwards by `x` cm)
 - `TL<x>` (turn left by `x` degrees)
 - `TR<x>` (turn right by `x` degrees)
-- `S` (scan the obstacle, i.e., convert it to the "visited" state)
+- `FL` (move forward towards the left in a quarter circle)
+- `FR` (move forward towarsd the right in a quarter circle)
+- `BL` (move backward towards the left in a quarter circle)
+- `BR` (move backward towarsd the right in a quarter circle)
+- `SCAN` (scan the obstacle, i.e., convert it to the "visited" state)
+- `FIN` (signify that there are no steps left)
 
 Examples include `F10` (move forward by `10` cm), and `TL90` (turn left by `90` degrees).
 
@@ -63,12 +68,15 @@ For convenience, you may also insert commands directly into the pipeline using:
 - `<shift> + x` (`B10`)
 - `<shift> + a` (`TL45`)
 - `<shift> + d` (`TR45`)
+- `<shift> + q` (`FL`)
+- `<shift> + e` (`FR`)
+- `<shift> + z` (`BL`)
+- `<shift> + c` (`BR`)
+
+> `TL` and `TR` are disabled for now...
 
 ## Networking
 
 To interact with the RPI, you may use `server_experiment.py` for reference. After starting the server
 using `python server_experiment.py`, you may send the current pipeline of instructions to the RPI
 by clicking on the top right button.
-
-> [!IMPORTANT]
-> The scan instruction (`S`) is replaced with a **newline** for easier parsing.

@@ -51,6 +51,7 @@ enum class Instruction {
     BackwardLeft,
     BackwardRight,
     Scan,
+    Finish,
 };
 
 enum class Direction {
@@ -95,6 +96,8 @@ std::string get_prefix(Instruction instruction) {
             return "BR";
         case Instruction::Scan:
             return "SCAN";
+        case Instruction::Finish:
+            return "FIN";
         default:
             return "?";
     }
@@ -932,21 +935,16 @@ class Transmitter {
     }
 
     static std::string get_command_chain() {
-        std::string commands, prev_command;
+        std::string commands;
         size_t step_cnt = steps.size();
 
         for (size_t i = 0; i < step_cnt; i++) {
             std::string command = steps[i]->serialize();
-            if (command == get_prefix(Instruction::Scan)) {
-                command = "\n";
-                if (i > 0 && prev_command != command) {
-                    commands.pop_back();
-                }
-            }
             commands += command;
-            if (i != step_cnt - 1 && command != "\n") commands += ' ';
-            prev_command = command;
+            commands += ' ';
         }
+
+        commands += get_prefix(Instruction::Finish);
 
         return commands;
     }

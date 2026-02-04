@@ -20,20 +20,21 @@
 #define ASIO_STANDALONE
 #include <asio.hpp>
 
-constexpr int DIRECTION_COUNT     = 4;
-constexpr int PADDING             = 30;
-constexpr int COORD_RANGE         = 200; // NOTE: corresponds to 200cm
-constexpr int RANDOMIZER_PADDING  = 20;  // NOTE: corresponds to 20cm
-constexpr int SQUARES_PER_LINE    = 20;
-constexpr float ROBOT_WIDTH       = 20.0f;
-constexpr int FPS                 = 60;
-constexpr int IMAGE_COUNT         = 7; // WARN: use a smaller value for easier debugging, switch to 6/7 (?) for actual
-constexpr int FONT_SIZE           = 20;
-constexpr int DOUBLE_BORDER_WIDTH = 6;
-constexpr float STEP_DURATION     = 2.0f;
-constexpr float EPS               = 1e-6;
-constexpr float INF               = 1e9;
-constexpr Color BG_COLOR          = { 230, 224, 216, 255 };
+constexpr bool ENABLE_ROTATION_ON_SPOT = false;
+constexpr int DIRECTION_COUNT          = 4;
+constexpr int PADDING                  = 30;
+constexpr int COORD_RANGE              = 200; // NOTE: corresponds to 200cm
+constexpr int RANDOMIZER_PADDING       = 20;  // NOTE: corresponds to 20cm
+constexpr int SQUARES_PER_LINE         = 20;
+constexpr float ROBOT_WIDTH            = 20.0f;
+constexpr int FPS                      = 60;
+constexpr int IMAGE_COUNT              = 7; // WARN: switch to 6/7/8 (?) for actual
+constexpr int FONT_SIZE                = 20;
+constexpr int DOUBLE_BORDER_WIDTH      = 6;
+constexpr float STEP_DURATION          = 2.0f;
+constexpr float EPS                    = 1e-6;
+constexpr float INF                    = 1e9;
+constexpr Color BG_COLOR               = { 230, 224, 216, 255 };
 
 bool is_robot_visble(float x, float y) {
     const float l = ROBOT_WIDTH / 2, r = COORD_RANGE - ROBOT_WIDTH / 2;
@@ -45,6 +46,10 @@ enum class Instruction {
     Backward,
     TurnLeft,
     TurnRight,
+    ForwardLeft,
+    ForwardRight,
+    BackwardLeft,
+    BackwardRight,
     Scan,
 };
 
@@ -73,15 +78,23 @@ float get_angle_from_direction(Direction direction) {
 std::string get_prefix(Instruction instruction) {
     switch (instruction) {
         case Instruction::Forward:
-            return "F";
+            return "FW";
         case Instruction::Backward:
-            return "B";
+            return "BW";
         case Instruction::TurnLeft:
             return "TL";
         case Instruction::TurnRight:
             return "TR";
+        case Instruction::ForwardLeft:
+            return "FL";
+        case Instruction::ForwardRight:
+            return "FR";
+        case Instruction::BackwardLeft:
+            return "BL";
+        case Instruction::BackwardRight:
+            return "BR";
         case Instruction::Scan:
-            return "S";
+            return "SCAN";
         default:
             return "?";
     }
@@ -135,7 +148,6 @@ std::string solution_status;
 class Grid {
     int squares_per_line;
     float grid_line_thickness;
-    const int block_size;
     std::vector<DirectedPoint> grid_points;
 
     void draw_border(int offset) const {
@@ -193,6 +205,8 @@ class Grid {
     static constexpr Color BORDER_COLOR        = { 56, 46, 46, 165 };
     static constexpr Color GRID_LINE_COLOR     = { 64, 54, 54, 65 };
 
+    const int block_size;
+
     Grid(int squares_per_line = SQUARES_PER_LINE)
         : squares_per_line(squares_per_line)
         , grid_line_thickness(GRID_LINE_THICKNESS / SCALE)
@@ -249,30 +263,42 @@ class Obstacle {
     void build_stop_pos() {
         found_stop_pos = false;
 
-        DirectedPoint candidate = { x, y, get_opposite_direction(direction) };
-        const float offset      = OBSTACLE_WIDTH / 2 + IMAGE_RECOGNITION_DISTANCE + ROBOT_WIDTH / 2;
+        const float offset = OBSTACLE_WIDTH / 2 + IMAGE_RECOGNITION_DISTANCE + ROBOT_WIDTH / 2;
+        float min_dist     = INF;
 
-        switch (direction) {
-            case Direction::North:
-                candidate.y += offset;
-                break;
-            case Direction::South:
-                candidate.y -= offset;
-                break;
-            case Direction::East:
-                candidate.x += offset;
-                break;
-            case Direction::West:
-                candidate.x -= offset;
-                break;
-            default:
-                break;
+        for (const auto &point : grid.get_grid_points()) {
+            if (!is_robot_visble(point.x, point.y)) continue;
+
+            DirectedPoint candidate = { point.x, point.y, get_opposite_direction(direction) };
+            bool okay               = true;
+
+            switch (direction) {
+                case Direction::North:
+                    okay = (point.y > y + offset - EPS);
+                    break;
+                case Direction::South:
+                    okay = (point.y < y - offset + EPS);
+                    break;
+                case Direction::East:
+                    okay = (point.x > x + offset - EPS);
+                    break;
+                case Direction::West:
+                    okay = (point.x < x - offset + EPS);
+                    break;
+                default:
+                    break;
+            }
+
+            if (!okay) continue;
+
+            float dist = Vector2Distance({ x, y }, { point.x, point.y });
+
+            if (dist < min_dist - EPS) {
+                found_stop_pos = true;
+                min_dist       = dist;
+                stop_pos       = candidate;
+            }
         }
-
-        if (!is_robot_visble(candidate.x, candidate.y)) return;
-
-        stop_pos       = candidate;
-        found_stop_pos = true;
     }
 
     Face get_directed_face() const {
@@ -497,8 +523,8 @@ class Obstacle {
 };
 
 class Robot {
-    float x                = ROBOT_WIDTH;
-    float y                = ROBOT_WIDTH;
+    float x                = ROBOT_WIDTH - static_cast<float>(grid.block_size) / 2;
+    float y                = ROBOT_WIDTH - static_cast<float>(grid.block_size) / 2;
     int scan_offset        = 0;
     float angle            = get_angle_from_direction(Direction::North);
     float border_thickness = BORDER_THICKNESS / Grid::SCALE;
@@ -724,6 +750,112 @@ class RotateStep : public Step {
 
         if (is_last_point) {
             render_direction_indicator(x, y, angle, Robot::INDICATOR_RADIUS, SIMULATED_BORDER_COLOR);
+        }
+    }
+
+    bool is_complete() override { return frame > frame_cnt; }
+
+    void cleanup() override {}
+};
+
+class CircularTurnStep : public Step {
+    Instruction instruction = Instruction::ForwardLeft;
+    float start_angle       = 0.0f;
+    Vector2 circle_center   = { 0, 0 };
+    Vector2 start_pos       = { 0, 0 };
+    float circle_angle      = 0.0f;
+
+  public:
+    static constexpr float ROTATION_SPEED     = 6.0;
+    static constexpr float TURN_ANGLE_DEGREES = 90;
+    static constexpr int TURN_BLOCK_COUNT     = 1;
+    static constexpr int ARC_SEGMENTS         = 20;
+
+    const float turn_radius = TURN_BLOCK_COUNT * grid.block_size;
+
+    CircularTurnStep(Instruction instruction)
+        : instruction(instruction) {}
+
+    std::string serialize() override {
+        std::string prefix = get_prefix(instruction);
+        return prefix;
+    }
+
+    void sync(const Robot &animated_robot) override {
+        Vector2 pos = animated_robot.get_position();
+        start_angle = animated_robot.get_angle();
+        start_pos   = pos;
+
+        bool is_left = instruction == Instruction::ForwardLeft || instruction == Instruction::BackwardLeft;
+
+        float center_offset = is_left ? (PI / 2.0f) : (-PI / 2.0f);
+
+        circle_center.x = start_pos.x + turn_radius * cosf(start_angle + center_offset);
+        circle_center.y = start_pos.y + turn_radius * sinf(start_angle + center_offset);
+
+        circle_angle = atan2f(start_pos.y - circle_center.y, start_pos.x - circle_center.x);
+
+        frame_cnt = std::max(1, static_cast<int>(roundf(TURN_ANGLE_DEGREES * STEP_DURATION / ROTATION_SPEED)));
+    }
+
+    void animate(Robot &animated_robot) override {
+        setup_animation(animated_robot);
+        float t = static_cast<float>(frame) / frame_cnt;
+
+        bool is_left    = instruction == Instruction::ForwardLeft || instruction == Instruction::BackwardLeft;
+        bool is_forward = instruction == Instruction::ForwardLeft || instruction == Instruction::ForwardRight;
+
+        float swing_dir     = (is_left == is_forward) ? 1.0f : -1.0f;
+        float center_offset = is_left ? (PI / 2.0f) : (-PI / 2.0f);
+
+        float current_circle_angle = circle_angle + (swing_dir * t * (PI / 2.0f));
+
+        Vector2 new_pos = { circle_center.x + turn_radius * cosf(current_circle_angle),
+                            circle_center.y + turn_radius * sinf(current_circle_angle) };
+
+        animated_robot.set_position(new_pos);
+        animated_robot.set_angle(current_circle_angle + center_offset);
+
+        frame++;
+    }
+
+    void instant_animate(Robot &animated_robot, bool is_last_point) override {
+        sync(animated_robot);
+
+        float path_thickness = SIMULATED_PATH_THICKNESS / Grid::SCALE;
+
+        bool is_left    = instruction == Instruction::ForwardLeft || instruction == Instruction::BackwardLeft;
+        bool is_forward = instruction == Instruction::ForwardLeft || instruction == Instruction::ForwardRight;
+
+        float swing_dir     = (is_left == is_forward) ? 1.0f : -1.0f;
+        float center_offset = is_left ? (PI / 2.0f) : (-PI / 2.0f);
+
+        float final_circle_angle = circle_angle + (swing_dir * (PI / 2.0f));
+
+        Vector2 end_pos = { circle_center.x + turn_radius * cosf(final_circle_angle),
+                            circle_center.y + turn_radius * sinf(final_circle_angle) };
+
+        animated_robot.set_position(end_pos);
+        animated_robot.set_angle(final_circle_angle + center_offset);
+
+        render_simulated_point(start_pos);
+
+        Vector2 prev_p = start_pos;
+
+        for (int i = 1; i <= ARC_SEGMENTS; i++) {
+            float t                  = static_cast<float>(i) / ARC_SEGMENTS;
+            float current_step_angle = circle_angle + (swing_dir * t * (PI / 2.0f));
+
+            Vector2 current_p = { circle_center.x + turn_radius * cosf(current_step_angle),
+                                  circle_center.y + turn_radius * sinf(current_step_angle) };
+
+            DrawLineEx(prev_p, current_p, path_thickness, SIMULATED_PATH_COLOR);
+            prev_p = current_p;
+        }
+
+        if (is_last_point) {
+            render_direction_indicator(
+                end_pos.x, end_pos.y, animated_robot.get_angle(), Robot::INDICATOR_RADIUS, SIMULATED_BORDER_COLOR);
         }
     }
 
@@ -1245,6 +1377,18 @@ class Solver {
             case Instruction::TurnRight:
                 steps.push_back(std::make_unique<RotateStep>(instuction, mini_command.magnitude));
                 break;
+            case Instruction::ForwardLeft:
+                steps.push_back(std::make_unique<CircularTurnStep>(instuction));
+                break;
+            case Instruction::BackwardLeft:
+                steps.push_back(std::make_unique<CircularTurnStep>(instuction));
+                break;
+            case Instruction::ForwardRight:
+                steps.push_back(std::make_unique<CircularTurnStep>(instuction));
+                break;
+            case Instruction::BackwardRight:
+                steps.push_back(std::make_unique<CircularTurnStep>(instuction));
+                break;
             default:
                 break;
         }
@@ -1280,6 +1424,48 @@ class Solver {
         return { MiniCommand({ instruction, euclid_dist }), euclid_dist };
     }
 
+    std::optional<Path> get_circular(Point start_pos, Point target_pos) {
+        auto instructions = {
+            Instruction::ForwardLeft,
+            Instruction::ForwardRight,
+            Instruction::BackwardLeft,
+            Instruction::BackwardRight,
+        };
+
+        const float turn_radius = CircularTurnStep::TURN_BLOCK_COUNT * grid.block_size;
+
+        for (auto instruction : instructions) {
+            Vector2 circle_center = { 0.0f, 0.0f };
+            float circle_angle    = 0.0f;
+
+            float start_angle = start_pos.angle;
+
+            bool is_left    = instruction == Instruction::ForwardLeft || instruction == Instruction::BackwardLeft;
+            bool is_forward = instruction == Instruction::ForwardLeft || instruction == Instruction::ForwardRight;
+
+            float swing_dir     = (is_left == is_forward) ? 1.0f : -1.0f;
+            float center_offset = is_left ? (PI / 2.0f) : (-PI / 2.0f);
+
+            circle_center.x = start_pos.x + turn_radius * cosf(start_angle + center_offset);
+            circle_center.y = start_pos.y + turn_radius * sinf(start_angle + center_offset);
+            circle_angle    = atan2f(start_pos.y - circle_center.y, start_pos.x - circle_center.x);
+
+            float final_circle_angle = circle_angle + (swing_dir * (PI / 2.0f));
+
+            Vector2 end_pos = { circle_center.x + turn_radius * cosf(final_circle_angle),
+                                circle_center.y + turn_radius * sinf(final_circle_angle) };
+
+            float end_angle = Wrap(final_circle_angle + center_offset, 0, 2.0f * PI);
+
+            if (FloatEquals(end_pos.x, target_pos.x) && FloatEquals(end_pos.y, target_pos.y)
+                && FloatEquals(end_angle, Wrap(target_pos.angle, 0, 2.0f * PI))) {
+                return Path({ MiniCommand({ instruction, 0.0f }), TURN_PENALTY });
+            }
+        }
+
+        return std::nullopt;
+    }
+
     void build() {
         points.clear();
         obstacle_idxs.clear();
@@ -1309,14 +1495,14 @@ class Solver {
     }
 
   public:
-    static constexpr float TURN_PENALTY = 12.0f;
-    static constexpr float MOVE_PENALTY = 5.0f;
+    static constexpr float TURN_PENALTY     = 12.0f;
+    static constexpr float CIRCULAR_PENALTY = 172.0f;
+    static constexpr float MOVE_PENALTY     = 5.0f;
 
     void solve() {
         auto start_time = std::chrono::high_resolution_clock::now();
 
         steps.clear();
-
         build();
 
         if (m == 0) {
@@ -1349,16 +1535,44 @@ class Solver {
 
                 if (in_collision) continue;
 
-                if (i == j) {
-                    base_dist[i * n + j] = 0.0f;
+                if (!is_robot_visble(cur_x, cur_y)) {
                     continue;
                 }
 
-                if (Vector2Equals({ cur_x, cur_y }, { end_x, end_y })) {
+                if (!is_robot_visble(end_x, end_y)) {
+                    continue;
+                }
+
+                if (i == j) {
+                    base_dist[i * n + j] = 0.0f;
+                    path[i][j].clear();
+                    continue;
+                }
+
+                if (FloatEquals(cur_x, end_x) && FloatEquals(cur_y, end_y)
+                    && FloatEquals(Wrap(points[i].angle, 0.0, 2.0f * PI), Wrap(points[j].angle, 0.0, 2.0f * PI))) {
+                    base_dist[i * n + j] = 0.0f;
+                    path[i][j].clear();
+                    continue;
+                }
+
+                {
+                    if (auto arc_match = get_circular(points[i], points[j]); arc_match.has_value()) {
+                        Path circular  = arc_match.value();
+                        float new_cost = circular.cost + MOVE_PENALTY;
+
+                        if (new_cost < base_dist[i * n + j] - EPS) {
+                            base_dist[i * n + j] = new_cost;
+                            path[i][j].clear();
+                            path[i][j].push_back(circular.mini_command);
+                        }
+                    }
+                }
+
+                if (ENABLE_ROTATION_ON_SPOT && Vector2Equals({ cur_x, cur_y }, { end_x, end_y })) {
                     Path initial_turn    = get_turn(points[i].angle, points[j].angle);
                     base_dist[i * n + j] = initial_turn.cost + MOVE_PENALTY;
                     if (initial_turn.mini_command.magnitude > EPS) path[i][j].push_back(initial_turn.mini_command);
-                    continue;
                 }
 
                 {
@@ -1370,16 +1584,30 @@ class Solver {
 
                     float new_cost = initial_turn.cost + linear.cost + last_turn.cost + 3 * MOVE_PENALTY;
 
-                    if (new_cost < base_dist[i * n + j] - EPS) {
-                        base_dist[i * n + j] = new_cost;
-                        path[i][j].clear();
-                        if (initial_turn.mini_command.magnitude > EPS) path[i][j].push_back(initial_turn.mini_command);
-                        if (linear.mini_command.magnitude > EPS) path[i][j].push_back(linear.mini_command);
-                        if (last_turn.mini_command.magnitude > EPS) path[i][j].push_back(last_turn.mini_command);
+                    // NOTE: Allow for solely linear steps in all cases.
+                    if (initial_turn.mini_command.magnitude <= EPS && last_turn.mini_command.magnitude <= EPS) {
+                        int linear_cost = new_cost - 2 * MOVE_PENALTY;
+
+                        if (linear_cost < base_dist[i * n + j] - EPS) {
+                            base_dist[i * n + j] = linear_cost;
+                            path[i][j].clear();
+                            if (linear.mini_command.magnitude > EPS) path[i][j].push_back(linear.mini_command);
+                        }
+                    }
+
+                    if (ENABLE_ROTATION_ON_SPOT) {
+                        if (new_cost < base_dist[i * n + j] - EPS) {
+                            base_dist[i * n + j] = new_cost;
+                            path[i][j].clear();
+                            if (initial_turn.mini_command.magnitude > EPS)
+                                path[i][j].push_back(initial_turn.mini_command);
+                            if (linear.mini_command.magnitude > EPS) path[i][j].push_back(linear.mini_command);
+                            if (last_turn.mini_command.magnitude > EPS) path[i][j].push_back(last_turn.mini_command);
+                        }
                     }
                 }
 
-                {
+                if (ENABLE_ROTATION_ON_SPOT) {
                     float initial_turn_angle = Wrap(PI + atan2f(end_y - cur_y, end_x - cur_x), 0, 2.0f * PI);
 
                     Path initial_turn = get_turn(points[i].angle, initial_turn_angle);
@@ -1570,35 +1798,35 @@ void handle_key_press() {
             }
         }
     } else {
-        if (IsKeyDown(KEY_LEFT)) {
+        if (IsKeyPressed(KEY_LEFT)) {
             if (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) {
                 robot.set_direction(Direction::West);
             } else {
-                robot.set_position_x(robot.get_position().x - 1.0f);
+                robot.set_position_x(robot.get_position().x - grid.block_size);
             }
         }
 
-        if (IsKeyDown(KEY_RIGHT)) {
+        if (IsKeyPressed(KEY_RIGHT)) {
             if (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) {
                 robot.set_direction(Direction::East);
             } else {
-                robot.set_position_x(robot.get_position().x + 1.0f);
+                robot.set_position_x(robot.get_position().x + grid.block_size);
             }
         }
 
-        if (IsKeyDown(KEY_DOWN)) {
+        if (IsKeyPressed(KEY_DOWN)) {
             if (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) {
                 robot.set_direction(Direction::South);
             } else {
-                robot.set_position_y(robot.get_position().y - 1.0f);
+                robot.set_position_y(robot.get_position().y - grid.block_size);
             }
         }
 
-        if (IsKeyDown(KEY_UP)) {
+        if (IsKeyPressed(KEY_UP)) {
             if (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) {
                 robot.set_direction(Direction::North);
             } else {
-                robot.set_position_y(robot.get_position().y + 1.0f);
+                robot.set_position_y(robot.get_position().y + grid.block_size);
             }
         }
     }
@@ -1613,6 +1841,18 @@ void handle_key_press() {
 
     // NOTE: These keybinds are solely for debugging purposes.
     if (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) {
+        if (IsKeyPressed(KEY_Q)) {
+            steps.push_back(std::make_unique<CircularTurnStep>(Instruction::ForwardLeft));
+        }
+        if (IsKeyPressed(KEY_E)) {
+            steps.push_back(std::make_unique<CircularTurnStep>(Instruction::ForwardRight));
+        }
+        if (IsKeyPressed(KEY_Z)) {
+            steps.push_back(std::make_unique<CircularTurnStep>(Instruction::BackwardLeft));
+        }
+        if (IsKeyPressed(KEY_C)) {
+            steps.push_back(std::make_unique<CircularTurnStep>(Instruction::BackwardRight));
+        }
         if (IsKeyPressed(KEY_W)) {
             steps.push_back(std::make_unique<LinearStep>(Instruction::Forward, 10.0f));
         }

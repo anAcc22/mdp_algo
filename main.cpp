@@ -22,14 +22,14 @@
 
 constexpr bool ENABLE_ROTATION_ON_SPOT = false;
 constexpr int DIRECTION_COUNT          = 4;
-constexpr int PADDING                  = 30;
+constexpr int PADDING                  = 24;
 constexpr int COORD_RANGE              = 200; // NOTE: corresponds to 200cm
 constexpr int RANDOMIZER_PADDING       = 20;  // NOTE: corresponds to 20cm
 constexpr int SQUARES_PER_LINE         = 40;
 constexpr float ROBOT_WIDTH            = 20.0f;
 constexpr int FPS                      = 60;
 constexpr int IMAGE_COUNT              = 7; // WARN: switch to 6/7/8 (?) for actual
-constexpr int FONT_SIZE                = 20;
+constexpr int FONT_SIZE                = 14;
 constexpr int DOUBLE_BORDER_WIDTH      = 6;
 constexpr float STEP_DURATION          = 2.0f;
 constexpr float EPS                    = 1e-6;
@@ -201,7 +201,7 @@ class Grid {
 
     static constexpr float BORDER_THICKNESS    = 2.0f;
     static constexpr float GRID_LINE_THICKNESS = 1.0f;
-    static constexpr int GRID_WIDTH            = 800;
+    static constexpr int GRID_WIDTH            = 600;
     static constexpr int GRID_START            = 3 * PADDING;
     static constexpr float SCALE               = static_cast<float>(GRID_WIDTH) / COORD_RANGE;
     static constexpr Color GRID_COLOR          = { 245, 240, 238, 255 };
@@ -1060,7 +1060,7 @@ class Animator {
   public:
     static constexpr int LABEL_SIZE      = 20;
     static constexpr short OPACITY       = 52;
-    static constexpr short COMMAND_LIMIT = 8;
+    static constexpr short COMMAND_LIMIT = 4;
 
     void reset_gui_style() const {
         Color normal_color = run_status || empty(steps) ? Obstacle::FACE_COLOR : Obstacle::VISITED_COLOR;

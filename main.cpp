@@ -1189,9 +1189,6 @@ void render_obstacle_buttons() {
         if (GuiButton({ x, y, PADDING, PADDING }, label.c_str())) {
             Obstacle::State new_state = obstacles[i].get_state();
 
-            if (new_state == Obstacle::State::Active) new_state = Obstacle::State::Visited;
-            else if (new_state == Obstacle::State::Visited) new_state = Obstacle::State::Active;
-
             obstacles[i].set_state(static_cast<Obstacle::State>(new_state));
             selected_idx = i;
         }
@@ -1753,14 +1750,21 @@ Solver solver;
 void handle_key_press() {
     if (selected_idx < IMAGE_COUNT) {
         if (IsKeyPressed(KEY_SPACE)) {
-            const Obstacle::State state      = obstacles[selected_idx].get_state();
+            Obstacle::State state            = obstacles[selected_idx].get_state();
             const Obstacle::State last_state = obstacles[selected_idx].get_last_state();
 
-            if (state == Obstacle::State::Hidden) {
-                obstacles[selected_idx].set_state(last_state);
+            if (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) {
+                if (state == Obstacle::State::Hidden) {
+                    obstacles[selected_idx].set_state(last_state);
+                } else {
+                    obstacles[selected_idx].set_last_state(state);
+                    obstacles[selected_idx].set_state(Obstacle::State::Hidden);
+                }
             } else {
-                obstacles[selected_idx].set_last_state(state);
-                obstacles[selected_idx].set_state(Obstacle::State::Hidden);
+                if (state == Obstacle::State::Active) state = Obstacle::State::Visited;
+                else if (state == Obstacle::State::Visited) state = Obstacle::State::Active;
+
+                obstacles[selected_idx].set_state(state);
             }
         }
 

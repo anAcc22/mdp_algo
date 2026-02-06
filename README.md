@@ -25,8 +25,9 @@ Using the left panel you may control both the positions and orientations of the 
 - `k` (move the selector up by one)
 - `<arrow_key>` (move the object in the corresponding direction)
 - `<shift> + <arrow_key>` (orientate the object in the corresponding direction)
-- `<space>` (hide/unhide an obstacle)
-- `<click>` (toggle the visited/unvisited status of an object)
+- `<space>` (toggle the visited/unvisited status of an object)
+- `<shift> + <space>` (hide/unhide an obstacle)
+- `<click>` (select an object)
 
 > For extra precision, you may also input the exact coordinates in the top panel
 

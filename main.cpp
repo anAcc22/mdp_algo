@@ -25,7 +25,7 @@ constexpr int DIRECTION_COUNT          = 4;
 constexpr int PADDING                  = 30;
 constexpr int COORD_RANGE              = 200; // NOTE: corresponds to 200cm
 constexpr int RANDOMIZER_PADDING       = 20;  // NOTE: corresponds to 20cm
-constexpr int SQUARES_PER_LINE         = 20;
+constexpr int SQUARES_PER_LINE         = 40;
 constexpr float ROBOT_WIDTH            = 20.0f;
 constexpr int FPS                      = 60;
 constexpr int IMAGE_COUNT              = 7; // WARN: switch to 6/7/8 (?) for actual
@@ -771,7 +771,7 @@ class CircularTurnStep : public Step {
   public:
     static constexpr float ROTATION_SPEED     = 6.0;
     static constexpr float TURN_ANGLE_DEGREES = 90;
-    static constexpr int TURN_BLOCK_COUNT     = 1;
+    static constexpr int TURN_BLOCK_COUNT     = 2;
     static constexpr int ARC_SEGMENTS         = 20;
 
     const float turn_radius = TURN_BLOCK_COUNT * grid.block_size;

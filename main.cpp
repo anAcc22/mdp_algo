@@ -28,7 +28,7 @@ constexpr int RANDOMIZER_PADDING       = 20;  // NOTE: corresponds to 20cm
 constexpr int SQUARES_PER_LINE         = 40;
 constexpr float ROBOT_WIDTH            = 20.0f;
 constexpr int FPS                      = 60;
-constexpr int IMAGE_COUNT              = 7; // WARN: switch to 6/7/8 (?) for actual
+constexpr int IMAGE_COUNT              = 3; // WARN: switch to 6/7/8 (?) for actual
 constexpr int FONT_SIZE                = 14;
 constexpr int DOUBLE_BORDER_WIDTH      = 6;
 constexpr float STEP_DURATION          = 2.0f;
@@ -1454,7 +1454,7 @@ class Solver {
 
             if (FloatEquals(end_pos.x, target_pos.x) && FloatEquals(end_pos.y, target_pos.y)
                 && FloatEquals(end_angle, Wrap(target_pos.angle, 0, 2.0f * PI))) {
-                return Path({ MiniCommand({ instruction, 0.0f }), TURN_PENALTY });
+                return Path({ MiniCommand({ instruction, 0.0f }), CIRCULAR_PENALTY });
             }
         }
 

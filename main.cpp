@@ -1507,6 +1507,7 @@ class Solver {
         }
 
         for (const auto &obstacle : obstacles) {
+            if (obstacle.get_state() != Obstacle::State::Active) continue;
             if (!obstacle.stop_pos_exists()) {
                 solution_status = SOLUTION_NOT_FOUND;
                 return;

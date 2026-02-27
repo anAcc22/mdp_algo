@@ -21,6 +21,7 @@ Using the left panel you may control both the positions and orientations of the 
 
 #### Bindings
 
+- `i` (reset robot position)
 - `j` (move the selector down by one)
 - `k` (move the selector up by one)
 - `<arrow_key>` (move the object in the corresponding direction)

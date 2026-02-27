@@ -28,8 +28,9 @@ constexpr int RANDOMIZER_PADDING       = 20;  // NOTE: corresponds to 20cm
 constexpr int SQUARES_PER_LINE         = 40;
 constexpr float ROBOT_WIDTH            = 20.0f;
 constexpr int FPS                      = 60;
-constexpr int IMAGE_COUNT              = 3; // WARN: switch to 6/7/8 (?) for actual
+constexpr int IMAGE_COUNT              = 8; // WARN: switch to 6/7/8 (?) for actual
 constexpr int FONT_SIZE                = 14;
+constexpr int MINI_FONT_SIZE           = 10;
 constexpr int DOUBLE_BORDER_WIDTH      = 6;
 constexpr float STEP_DURATION          = 2.0f;
 constexpr float EPS                    = 1e-6;
@@ -37,7 +38,8 @@ constexpr float INF                    = 1e9;
 constexpr Color BG_COLOR               = { 230, 224, 216, 255 };
 
 bool is_robot_visble(float x, float y) {
-    const float l = ROBOT_WIDTH / 2, r = COORD_RANGE - ROBOT_WIDTH / 2;
+    // const float l = ROBOT_WIDTH / 2, r = COORD_RANGE - ROBOT_WIDTH / 2;
+    const float l = 0, r = COORD_RANGE;
     return x > l - EPS && y > l - EPS && x < r + EPS && y < r + EPS;
 }
 
@@ -544,10 +546,16 @@ class Robot {
     float get_angle() const { return angle; }
 
     void set_position(float x_, float y_) {
-        const float offset = ROBOT_WIDTH / 2;
+        // const float offset = ROBOT_WIDTH / 2;
+        const float offset = 0;
 
         x = std::clamp(x_, offset, COORD_RANGE - offset);
         y = std::clamp(y_, offset, COORD_RANGE - offset);
+    }
+
+    void reset_position() {
+        x = ROBOT_WIDTH - static_cast<float>(grid.block_size) / 2;
+        y = ROBOT_WIDTH - static_cast<float>(grid.block_size) / 2;
     }
 
     void set_position(Vector2 pos) { set_position(pos.x, pos.y); }
@@ -771,7 +779,7 @@ class CircularTurnStep : public Step {
   public:
     static constexpr float ROTATION_SPEED     = 6.0;
     static constexpr float TURN_ANGLE_DEGREES = 90;
-    static constexpr int TURN_BLOCK_COUNT     = 2;
+    static constexpr int TURN_BLOCK_COUNT     = 5;
     static constexpr int ARC_SEGMENTS         = 20;
 
     const float turn_radius = TURN_BLOCK_COUNT * grid.block_size;
@@ -1220,7 +1228,7 @@ void render_solution_status() {
 
     Color color = (strcmp(status, SOLUTION_NOT_FOUND) == 0 ? Obstacle::HIDDEN_BUTTON_COLOR : Grid::BORDER_COLOR);
 
-    DrawTextPro(font, status, position, origin, -90.0f, FONT_SIZE, spacing, color);
+    DrawTextPro(font, status, position, origin, -90.0f, MINI_FONT_SIZE, spacing, color);
 }
 
 void render_play_button() {
@@ -1832,6 +1840,10 @@ void handle_key_press() {
                 robot.set_position_y(robot.get_position().y + grid.block_size);
             }
         }
+    }
+
+    if (IsKeyPressed(KEY_I)) {
+        robot.reset_position();
     }
 
     if (IsKeyPressed(KEY_J)) {

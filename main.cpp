@@ -25,14 +25,14 @@ constexpr int DIRECTION_COUNT          = 4;
 constexpr int PADDING                  = 24;
 constexpr int COORD_RANGE              = 200; // NOTE: corresponds to 200cm
 constexpr int RANDOMIZER_PADDING       = 20;  // NOTE: corresponds to 20cm
-constexpr int SQUARES_PER_LINE         = 40;
+constexpr int SQUARES_PER_LINE         = 20;
 constexpr float ROBOT_WIDTH            = 20.0f;
 constexpr int FPS                      = 60;
-constexpr int IMAGE_COUNT              = 8; // WARN: switch to 6/7/8 (?) for actual
+constexpr int IMAGE_COUNT              = 4; // WARN: switch to 6/7/8 (?) for actual
 constexpr int FONT_SIZE                = 14;
 constexpr int MINI_FONT_SIZE           = 10;
 constexpr int DOUBLE_BORDER_WIDTH      = 6;
-constexpr float STEP_DURATION          = 2.0f;
+constexpr float STEP_DURATION          = 1.0f;
 constexpr float EPS                    = 1e-6;
 constexpr float INF                    = 1e9;
 constexpr Color BG_COLOR               = { 230, 224, 216, 255 };
@@ -143,7 +143,7 @@ std::random_device device;
 std::mt19937 gen;
 
 Font font;
-int selected_idx = IMAGE_COUNT;
+int selected_idx = 0;
 
 constexpr const char *SOLUTION_NOT_FOUND = "Failed to find a solution.";
 constexpr const char *SOLUTION_FOUND     = "Solution found in ";
@@ -556,6 +556,8 @@ class Robot {
     void reset_position() {
         x = ROBOT_WIDTH - static_cast<float>(grid.block_size) / 2;
         y = ROBOT_WIDTH - static_cast<float>(grid.block_size) / 2;
+
+        angle = get_angle_from_direction(Direction::North);
     }
 
     void set_position(Vector2 pos) { set_position(pos.x, pos.y); }
@@ -777,15 +779,21 @@ class CircularTurnStep : public Step {
     float circle_angle      = 0.0f;
 
   public:
-    static constexpr float ROTATION_SPEED     = 6.0;
-    static constexpr float TURN_ANGLE_DEGREES = 90;
-    static constexpr int TURN_BLOCK_COUNT     = 5;
-    static constexpr int ARC_SEGMENTS         = 20;
+    static constexpr float ROTATION_SPEED       = 6.0;
+    static constexpr float TURN_ANGLE_DEGREES   = 90;
+    static constexpr int TURN_BLOCK_COUNT_LEFT  = 2;
+    static constexpr int TURN_BLOCK_COUNT_RIGHT = 3;
+    static constexpr int ARC_SEGMENTS           = 20;
 
-    const float turn_radius = TURN_BLOCK_COUNT * grid.block_size;
+    const float turn_radius{};
 
     CircularTurnStep(Instruction instruction)
-        : instruction(instruction) {}
+        : instruction(instruction)
+        , turn_radius(
+              (instruction == Instruction::ForwardLeft || instruction == Instruction::BackwardRight
+                   ? TURN_BLOCK_COUNT_LEFT
+                   : TURN_BLOCK_COUNT_RIGHT)
+              * grid.block_size) {}
 
     std::string serialize() override {
         std::string prefix = get_prefix(instruction);
@@ -806,7 +814,7 @@ class CircularTurnStep : public Step {
 
         circle_angle = atan2f(start_pos.y - circle_center.y, start_pos.x - circle_center.x);
 
-        frame_cnt = std::max(1, static_cast<int>(roundf(TURN_ANGLE_DEGREES * STEP_DURATION / ROTATION_SPEED)));
+        frame_cnt = std::max(1, static_cast<int>(roundf(TURN_ANGLE_DEGREES * 2.5f * STEP_DURATION / ROTATION_SPEED)));
     }
 
     void animate(Robot &animated_robot) override {
@@ -1435,9 +1443,13 @@ class Solver {
             Instruction::BackwardRight,
         };
 
-        const float turn_radius = CircularTurnStep::TURN_BLOCK_COUNT * grid.block_size;
-
         for (auto instruction : instructions) {
+            float turn_radius
+                = ((instruction == Instruction::ForwardLeft || instruction == Instruction::BackwardRight
+                        ? CircularTurnStep::TURN_BLOCK_COUNT_LEFT
+                        : CircularTurnStep::TURN_BLOCK_COUNT_RIGHT)
+                   * grid.block_size);
+
             Vector2 circle_center = { 0.0f, 0.0f };
             float circle_angle    = 0.0f;
 

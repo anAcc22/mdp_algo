@@ -25,10 +25,10 @@ constexpr int DIRECTION_COUNT          = 4;
 constexpr int PADDING                  = 24;
 constexpr int COORD_RANGE              = 200; // NOTE: corresponds to 200cm
 constexpr int RANDOMIZER_PADDING       = 20;  // NOTE: corresponds to 20cm
-constexpr int SQUARES_PER_LINE         = 20;
+constexpr int SQUARES_PER_LINE         = 40;
 constexpr float ROBOT_WIDTH            = 20.0f;
 constexpr int FPS                      = 60;
-constexpr int IMAGE_COUNT              = 4; // WARN: switch to 6/7/8 (?) for actual
+constexpr int IMAGE_COUNT              = 8; // WARN: switch to 6/7/8 (?) for actual
 constexpr int FONT_SIZE                = 14;
 constexpr int MINI_FONT_SIZE           = 10;
 constexpr int DOUBLE_BORDER_WIDTH      = 6;
@@ -255,18 +255,26 @@ class Obstacle {
     };
 
   private:
-    bool found_stop_pos    = false;
-    std::string label      = "";
-    float x                = static_cast<float>(COORD_RANGE) / 2;
-    float y                = static_cast<float>(COORD_RANGE) / 2;
-    State state            = State::Active;
-    State last_state       = State::Active;
-    float border_thickness = BORDER_THICKNESS / Grid::SCALE;
-    Direction direction    = Direction::West;
-    DirectedPoint stop_pos = { 0.0f, 0.0f, Direction::North };
+    size_t stop_pos_color_idx                   = 0;
+    bool found_stop_pos                         = false;
+    std::string label                           = "";
+    float x                                     = static_cast<float>(COORD_RANGE) / 2;
+    float y                                     = static_cast<float>(COORD_RANGE) / 2;
+    State state                                 = State::Active;
+    State last_state                            = State::Active;
+    float border_thickness                      = BORDER_THICKNESS / Grid::SCALE;
+    Direction direction                         = Direction::West;
+    DirectedPoint stop_pos                      = { 0.0f, 0.0f, Direction::North };
+    constexpr static float CONE_RADIUS          = 0.40f;
+    constexpr static size_t MAX_CANDIDATE_COUNT = 16uz;
+    std::vector<DirectedPoint> stop_pos_set{};
 
     void build_stop_pos() {
         found_stop_pos = false;
+        stop_pos_set.clear();
+
+        using Candidate = std::pair<float, DirectedPoint>;
+        std::vector<Candidate> candidates;
 
         const float offset = OBSTACLE_WIDTH / 2 + IMAGE_RECOGNITION_DISTANCE + ROBOT_WIDTH / 2;
         float min_dist     = INF;
@@ -274,35 +282,57 @@ class Obstacle {
         for (const auto &point : grid.get_grid_points()) {
             if (!is_robot_visble(point.x, point.y)) continue;
 
-            DirectedPoint candidate = { point.x, point.y, get_opposite_direction(direction) };
+            DirectedPoint candidate = point;
             bool okay               = true;
+            double main_axis_diff{}, cross_axis_diff{};
+
+            if (candidate.direction != get_opposite_direction(direction)) continue;
 
             switch (direction) {
                 case Direction::North:
-                    okay = (point.y > y + offset - EPS);
+                    okay            = (point.y > y + offset - EPS);
+                    main_axis_diff  = abs(point.y - y);
+                    cross_axis_diff = abs(point.x - x);
                     break;
                 case Direction::South:
-                    okay = (point.y < y - offset + EPS);
+                    okay            = (point.y < y - offset + EPS);
+                    main_axis_diff  = abs(point.y - y);
+                    cross_axis_diff = abs(point.x - x);
                     break;
                 case Direction::East:
-                    okay = (point.x > x + offset - EPS);
+                    okay            = (point.x > x + offset - EPS);
+                    main_axis_diff  = abs(point.x - x);
+                    cross_axis_diff = abs(point.y - y);
                     break;
                 case Direction::West:
-                    okay = (point.x < x - offset + EPS);
+                    okay            = (point.x < x - offset + EPS);
+                    main_axis_diff  = abs(point.x - x);
+                    cross_axis_diff = abs(point.y - y);
                     break;
                 default:
                     break;
             }
 
-            if (!okay) continue;
+            if (!okay || cross_axis_diff > main_axis_diff * CONE_RADIUS) continue;
 
-            float dist = Vector2Distance({ x, y }, { point.x, point.y });
+            float dist = Vector2Distance({ x, y }, { candidate.x, candidate.y });
+            candidates.emplace_back(dist, candidate);
 
             if (dist < min_dist - EPS) {
                 found_stop_pos = true;
                 min_dist       = dist;
                 stop_pos       = candidate;
             }
+        }
+
+        std::sort(std::begin(candidates), std::end(candidates), [&](const Candidate &lhs, const Candidate &rhs) {
+            return lhs.first < rhs.first;
+        });
+
+        while (candidates.size() > MAX_CANDIDATE_COUNT) candidates.pop_back();
+
+        for (const auto &[_, point] : candidates) {
+            stop_pos_set.push_back(point);
         }
     }
 
@@ -345,8 +375,14 @@ class Obstacle {
     static constexpr Color HIDDEN_BUTTON_COLOR           = { 230, 80, 80, 255 };
     static constexpr short OPACITY                       = 52;
     static constexpr int LABEL_SIZE                      = FONT_SIZE;
+    static constexpr Color STOP_POS_COLORS[]             = {
+        { 230, 25, 25, 150 }, { 230, 162, 25, 150 }, { 162, 230, 25, 150 },
+        { 25, 230, 25, 150 }, { 25, 230, 161, 150 }, { 25, 161, 230, 150 },
+        { 25, 25, 230, 150 }, { 162, 25, 230, 150 }, { 230, 25, 162, 150 },
+    };
 
-    Obstacle() = default;
+    Obstacle(size_t stop_pos_color_idx)
+        : stop_pos_color_idx(stop_pos_color_idx) {}
 
     Vector2 get_position() const { return { x, y }; }
 
@@ -359,6 +395,8 @@ class Obstacle {
     bool stop_pos_exists() const { return found_stop_pos; }
 
     DirectedPoint get_stop_pos() const { return stop_pos; }
+
+    std::vector<DirectedPoint> get_stop_pos_set() const { return stop_pos_set; }
 
     void set_position(float x_, float y_) {
         const float offset = OBSTACLE_WIDTH / 2;
@@ -467,7 +505,14 @@ class Obstacle {
         DrawLineEx(face.first, face.second, 2 * border_thickness, FACE_COLOR);
 
         if (found_stop_pos) {
-            render_direction_indicator(stop_pos.x, stop_pos.y, stop_pos.direction, INDICATOR_RADIUS, FACE_COLOR);
+            for (const auto &stop_pos_candidate : stop_pos_set) {
+                render_direction_indicator(
+                    stop_pos_candidate.x,
+                    stop_pos_candidate.y,
+                    stop_pos_candidate.direction,
+                    INDICATOR_RADIUS,
+                    STOP_POS_COLORS[stop_pos_color_idx]);
+            }
         }
     }
 
@@ -545,12 +590,25 @@ class Robot {
     Vector2 get_position() const { return { x, y }; }
     float get_angle() const { return angle; }
 
-    void set_position(float x_, float y_) {
-        // const float offset = ROBOT_WIDTH / 2;
-        const float offset = 0;
+    void set_position(Vector2 pos, bool should_snap_to_grid = false) {
+        float min_dist  = INF;
+        Vector2 new_pos = pos;
 
-        x = std::clamp(x_, offset, COORD_RANGE - offset);
-        y = std::clamp(y_, offset, COORD_RANGE - offset);
+        if (should_snap_to_grid) {
+            for (const auto &point : grid.get_grid_points()) {
+                float dist = Vector2Distance({ point.x, point.y }, pos);
+                if (dist > min_dist || FloatEquals(dist, min_dist)) continue;
+                min_dist = dist;
+                new_pos  = { point.x, point.y };
+            }
+        }
+
+        x = new_pos.x;
+        y = new_pos.y;
+    }
+
+    void set_position(float x_, float y_, bool should_snap_to_grid = false) {
+        set_position(Vector2{ x_, y_ }, should_snap_to_grid);
     }
 
     void reset_position() {
@@ -560,11 +618,9 @@ class Robot {
         angle = get_angle_from_direction(Direction::North);
     }
 
-    void set_position(Vector2 pos) { set_position(pos.x, pos.y); }
+    void set_position_x(float x_, bool should_snap_to_grid = false) { set_position(x_, y, should_snap_to_grid); }
 
-    void set_position_x(float x_) { set_position(x_, y); }
-
-    void set_position_y(float y_) { set_position(x, y_); }
+    void set_position_y(float y_, bool should_snap_to_grid = false) { set_position(x, y_, should_snap_to_grid); }
 
     void set_angle(float angle_) { angle = angle_; }
 
@@ -617,7 +673,7 @@ class Robot {
     }
 };
 
-std::array<Obstacle, IMAGE_COUNT> obstacles;
+std::vector<Obstacle> obstacles;
 Robot robot;
 
 class Step {
@@ -781,8 +837,8 @@ class CircularTurnStep : public Step {
   public:
     static constexpr float ROTATION_SPEED       = 6.0;
     static constexpr float TURN_ANGLE_DEGREES   = 90;
-    static constexpr int TURN_BLOCK_COUNT_LEFT  = 2;
-    static constexpr int TURN_BLOCK_COUNT_RIGHT = 3;
+    static constexpr int TURN_BLOCK_COUNT_LEFT  = 4;
+    static constexpr int TURN_BLOCK_COUNT_RIGHT = 6;
     static constexpr int ARC_SEGMENTS           = 20;
 
     const float turn_radius{};
@@ -1509,12 +1565,39 @@ class Solver {
         path.assign(n, std::vector(n, std::vector<MiniCommand>()));
     }
 
+    // NOTE: don't add obstacle default stop positions to `points`
+    void build_greedily() {
+        points.clear();
+        obstacle_idxs.clear();
+        m = 0;
+
+        Vector2 robot_pos = robot.get_position();
+        points.push_back({ robot_pos.x, robot_pos.y, Wrap(robot.get_angle(), 0, 2.0f * PI) });
+
+        for (int i = 0; i < IMAGE_COUNT; i++) {
+            if (obstacles[i].get_state() != Obstacle::State::Active) continue;
+            obstacle_idxs.push_back(i);
+            m++;
+        }
+
+        for (const auto &point : grid.get_grid_points()) {
+            if (!is_robot_visble(point.x, point.y)) continue;
+            points.push_back({ point.x, point.y, get_angle_from_direction(point.direction) });
+        }
+
+        n = points.size();
+
+        dist.assign(n * n, INF);
+        base_dist = dist;
+        path.assign(n, std::vector(n, std::vector<MiniCommand>()));
+    }
+
   public:
     static constexpr float TURN_PENALTY     = 12.0f;
     static constexpr float CIRCULAR_PENALTY = 172.0f;
     static constexpr float MOVE_PENALTY     = 5.0f;
 
-    void solve() {
+    /* void solve() {
         auto start_time = std::chrono::high_resolution_clock::now();
 
         steps.clear();
@@ -1763,6 +1846,257 @@ class Solver {
         auto time_taken_ms = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
 
         solution_status = SOLUTION_FOUND + std::to_string(time_taken_ms.count()) + " ms.";
+    } */
+
+    void solve_greedily() {
+        auto start_time = std::chrono::high_resolution_clock::now();
+
+        steps.clear();
+        build_greedily();
+
+        if (m == 0) {
+            solution_status = SOLUTION_FOUND;
+            solution_status += "0 ms.";
+            return;
+        }
+
+        for (const auto &obstacle : obstacles) {
+            if (obstacle.get_state() != Obstacle::State::Active) continue;
+            if (!obstacle.stop_pos_exists()) {
+                solution_status = SOLUTION_NOT_FOUND;
+                return;
+            }
+        }
+
+        for (size_t i = 0; i < n; i++) {
+            for (size_t j = 0; j < n; j++) {
+                bool in_collision = false;
+
+                float cur_x = points[i].x, cur_y = points[i].y;
+                float end_x = points[j].x, end_y = points[j].y;
+
+                for (const auto &obstacle : obstacles) {
+                    if (obstacle.get_state() == Obstacle::State::Hidden) continue;
+                    if (obstacle.collide({ cur_x, cur_y }, { end_x, end_y })) {
+                        in_collision = true;
+                        break;
+                    }
+                }
+
+                if (in_collision) continue;
+
+                if (!is_robot_visble(cur_x, cur_y)) {
+                    continue;
+                }
+
+                if (!is_robot_visble(end_x, end_y)) {
+                    continue;
+                }
+
+                if (i == j) {
+                    base_dist[i * n + j] = 0.0f;
+                    path[i][j].clear();
+                    continue;
+                }
+
+                if (FloatEquals(cur_x, end_x) && FloatEquals(cur_y, end_y)
+                    && FloatEquals(Wrap(points[i].angle, 0.0, 2.0f * PI), Wrap(points[j].angle, 0.0, 2.0f * PI))) {
+                    base_dist[i * n + j] = 0.0f;
+                    path[i][j].clear();
+                    continue;
+                }
+
+                {
+                    if (auto arc_match = get_circular(points[i], points[j]); arc_match.has_value()) {
+                        Path circular  = arc_match.value();
+                        float new_cost = circular.cost + MOVE_PENALTY;
+
+                        if (new_cost < base_dist[i * n + j] - EPS) {
+                            base_dist[i * n + j] = new_cost;
+                            path[i][j].clear();
+                            path[i][j].push_back(circular.mini_command);
+                        }
+                    }
+                }
+
+                if (ENABLE_ROTATION_ON_SPOT && Vector2Equals({ cur_x, cur_y }, { end_x, end_y })) {
+                    Path initial_turn    = get_turn(points[i].angle, points[j].angle);
+                    base_dist[i * n + j] = initial_turn.cost + MOVE_PENALTY;
+                    if (initial_turn.mini_command.magnitude > EPS) path[i][j].push_back(initial_turn.mini_command);
+                }
+
+                {
+                    float initial_turn_angle = Wrap(atan2f(end_y - cur_y, end_x - cur_x), 0, 2.0f * PI);
+
+                    Path initial_turn = get_turn(points[i].angle, initial_turn_angle);
+                    Path linear       = get_linear(Instruction::Forward, { cur_x, cur_y }, { end_x, end_y });
+                    Path last_turn    = get_turn(initial_turn_angle, points[j].angle);
+
+                    float new_cost = initial_turn.cost + linear.cost + last_turn.cost + 3 * MOVE_PENALTY;
+
+                    // NOTE: Allow for solely linear steps in all cases.
+                    if (initial_turn.mini_command.magnitude <= EPS && last_turn.mini_command.magnitude <= EPS) {
+                        int linear_cost = new_cost - 2 * MOVE_PENALTY;
+
+                        if (linear_cost < base_dist[i * n + j] - EPS) {
+                            base_dist[i * n + j] = linear_cost;
+                            path[i][j].clear();
+                            if (linear.mini_command.magnitude > EPS) path[i][j].push_back(linear.mini_command);
+                        }
+                    }
+
+                    if (ENABLE_ROTATION_ON_SPOT) {
+                        if (new_cost < base_dist[i * n + j] - EPS) {
+                            base_dist[i * n + j] = new_cost;
+                            path[i][j].clear();
+                            if (initial_turn.mini_command.magnitude > EPS)
+                                path[i][j].push_back(initial_turn.mini_command);
+                            if (linear.mini_command.magnitude > EPS) path[i][j].push_back(linear.mini_command);
+                            if (last_turn.mini_command.magnitude > EPS) path[i][j].push_back(last_turn.mini_command);
+                        }
+                    }
+                }
+
+                if (ENABLE_ROTATION_ON_SPOT) {
+                    float initial_turn_angle = Wrap(PI + atan2f(end_y - cur_y, end_x - cur_x), 0, 2.0f * PI);
+
+                    Path initial_turn = get_turn(points[i].angle, initial_turn_angle);
+                    Path linear       = get_linear(Instruction::Backward, { cur_x, cur_y }, { end_x, end_y });
+                    Path last_turn    = get_turn(initial_turn_angle, points[j].angle);
+
+                    float new_cost = initial_turn.cost + linear.cost + last_turn.cost + 3 * MOVE_PENALTY;
+
+                    if (new_cost < base_dist[i * n + j] - EPS) {
+                        base_dist[i * n + j] = new_cost;
+                        path[i][j].clear();
+                        if (initial_turn.mini_command.magnitude > EPS) path[i][j].push_back(initial_turn.mini_command);
+                        if (linear.mini_command.magnitude > EPS) path[i][j].push_back(linear.mini_command);
+                        if (last_turn.mini_command.magnitude > EPS) path[i][j].push_back(last_turn.mini_command);
+                    }
+                }
+            }
+        }
+
+        std::vector sssp_parent(n, std::vector(n, -1));
+
+        std::vector adj(n, std::vector<int>());
+
+        for (size_t u = 0; u < n; u++) {
+            for (size_t v = 0; v < n; v++) {
+                if (FloatEquals(base_dist[u * n + v], INF)) continue;
+                adj[u].push_back(v);
+            }
+        }
+
+        auto build_sssp = [&](int init_u) -> void {
+            if (FloatEquals(base_dist[init_u * n + init_u], INF)) return;
+
+            const float IMPROVEMENT_THRESHOLD = 1e-6;
+
+            using Node = std::pair<float, int>;
+
+            std::vector seen(n, 0);
+            std::priority_queue<Node, std::vector<Node>, std::greater<Node>> q;
+
+            dist[init_u * n + init_u] = 0;
+            q.push({ dist[init_u * n + init_u], init_u });
+
+            while (q.size()) {
+                auto [cur_dist, u] = q.top();
+                q.pop();
+
+                if (!FloatEquals(cur_dist, dist[init_u * n + u])) continue;
+                seen[u] = true;
+
+                for (auto v : adj[u]) {
+                    if (seen[v]) continue;
+                    float new_cost = cur_dist + base_dist[u * n + v];
+                    if (new_cost >= dist[init_u * n + v] - IMPROVEMENT_THRESHOLD) continue;
+                    dist[init_u * n + v]   = new_cost;
+                    sssp_parent[init_u][v] = u;
+                    q.push({ dist[init_u * n + v], v });
+                }
+            }
+        };
+
+        std::vector<std::jthread> sssp_threads;
+
+        for (size_t i = 0; i <= m; i++) {
+            sssp_threads.emplace_back(build_sssp, i);
+        }
+
+        sssp_threads.clear();
+
+        auto get_path = [&](int u, int v) -> std::vector<MiniCommand> {
+            std::vector<MiniCommand> commands;
+            std::vector<int> nodes;
+
+            while (v != u && v != -1) {
+                nodes.push_back(v);
+                v = sssp_parent[u][v];
+            }
+            nodes.push_back(u);
+
+            std::reverse(std::begin(nodes), std::end(nodes));
+
+            for (size_t i = 1; i < nodes.size(); i++) {
+                for (const auto &c : path[nodes[i - 1]][nodes[i]]) {
+                    commands.push_back(c);
+                }
+            }
+
+            return commands;
+        };
+
+        int current_u = 0;
+        std::vector obstacle_candidates(IMAGE_COUNT, std::set<size_t>());
+
+        for (size_t i = 0; i < IMAGE_COUNT; i++) {
+            for (const auto &candidate : obstacles[i].get_stop_pos_set()) {
+                for (size_t j = 1; j < n; j++) {
+                    if (!FloatEquals(points[j].x, candidate.x)) continue;
+                    if (!FloatEquals(points[j].y, candidate.y)) continue;
+                    if (!FloatEquals(points[j].angle, get_angle_from_direction(candidate.direction))) continue;
+                    obstacle_candidates[i].insert(j);
+                }
+            }
+        }
+
+        while (obstacle_idxs.size()) {
+            build_sssp(current_u);
+
+            int next_obstacle_idx{}, next_u{};
+            double min_dist = INF;
+
+            for (auto i : obstacle_idxs) {
+                for (auto j : obstacle_candidates[i]) {
+                    double new_dist = dist[current_u * n + j];
+                    if (FloatEquals(min_dist, new_dist) || new_dist > min_dist) continue;
+                    min_dist          = new_dist;
+                    next_obstacle_idx = i;
+                    next_u            = j;
+                }
+            }
+
+            if (FloatEquals(min_dist, INF)) {
+                solution_status = SOLUTION_NOT_FOUND;
+                steps.clear();
+                return;
+            }
+
+            for (const auto &mini_command : get_path(current_u, next_u)) {
+                insert_step(mini_command);
+            }
+            insert_scan(next_obstacle_idx);
+
+            obstacle_idxs.erase(std::find(std::begin(obstacle_idxs), std::end(obstacle_idxs), next_obstacle_idx));
+            current_u = next_u;
+        }
+
+        auto end_time      = std::chrono::high_resolution_clock::now();
+        auto time_taken_ms = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
+
+        solution_status = SOLUTION_FOUND + std::to_string(time_taken_ms.count()) + " ms.";
     }
 };
 
@@ -1825,7 +2159,7 @@ void handle_key_press() {
             if (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) {
                 robot.set_direction(Direction::West);
             } else {
-                robot.set_position_x(robot.get_position().x - grid.block_size);
+                robot.set_position_x(robot.get_position().x - grid.block_size, true);
             }
         }
 
@@ -1833,7 +2167,7 @@ void handle_key_press() {
             if (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) {
                 robot.set_direction(Direction::East);
             } else {
-                robot.set_position_x(robot.get_position().x + grid.block_size);
+                robot.set_position_x(robot.get_position().x + grid.block_size, true);
             }
         }
 
@@ -1841,7 +2175,7 @@ void handle_key_press() {
             if (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) {
                 robot.set_direction(Direction::South);
             } else {
-                robot.set_position_y(robot.get_position().y - grid.block_size);
+                robot.set_position_y(robot.get_position().y - grid.block_size, true);
             }
         }
 
@@ -1849,7 +2183,7 @@ void handle_key_press() {
             if (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) {
                 robot.set_direction(Direction::North);
             } else {
-                robot.set_position_y(robot.get_position().y + grid.block_size);
+                robot.set_position_y(robot.get_position().y + grid.block_size, true);
             }
         }
     }
@@ -1893,7 +2227,7 @@ void handle_key_press() {
             steps.push_back(std::make_unique<RotateStep>(Instruction::TurnRight, 45.0f));
         }
         if (IsKeyPressed(KEY_R)) {
-            solver.solve();
+            solver.solve_greedily();
         }
     }
 }
@@ -1925,6 +2259,7 @@ int main() {
     gen.seed(device());
 
     for (int i = 0; i < IMAGE_COUNT; i++) {
+        obstacles.emplace_back(i);
         obstacles[i].set_label(std::to_string(i + 1));
     }
 

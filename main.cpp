@@ -2081,6 +2081,9 @@ class Solver {
             if (FloatEquals(min_dist, INF)) {
                 solution_status = SOLUTION_NOT_FOUND;
                 steps.clear();
+
+                std::cerr << "(FAIL)" << std::endl;
+
                 return;
             }
 
@@ -2088,6 +2091,11 @@ class Solver {
                 insert_step(mini_command);
             }
             insert_scan(next_obstacle_idx);
+
+            std::cerr << "(" << next_obstacle_idx + 1 << ")";
+
+            if (obstacle_idxs.size() != 1) std::cerr << " -> ";
+            else std::cerr << std::endl;
 
             obstacle_idxs.erase(std::find(std::begin(obstacle_idxs), std::end(obstacle_idxs), next_obstacle_idx));
             current_u = next_u;

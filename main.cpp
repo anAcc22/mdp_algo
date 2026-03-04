@@ -265,8 +265,8 @@ class Obstacle {
     float border_thickness                      = BORDER_THICKNESS / Grid::SCALE;
     Direction direction                         = Direction::West;
     DirectedPoint stop_pos                      = { 0.0f, 0.0f, Direction::North };
-    constexpr static float CONE_RADIUS          = 0.40f;
-    constexpr static size_t MAX_CANDIDATE_COUNT = 16uz;
+    constexpr static float CONE_RADIUS          = 0.45f;
+    constexpr static size_t MAX_CANDIDATE_COUNT = 25uz;
     std::vector<DirectedPoint> stop_pos_set{};
 
     void build_stop_pos() {
@@ -1341,7 +1341,7 @@ void render_position_controller() {
         in_edit_x = !in_edit_x;
         if (!in_edit_x) {
             if (selected_idx < IMAGE_COUNT) obstacles[selected_idx].set_position_x(input_x);
-            else robot.set_position_x(input_x);
+            else robot.set_position_x(input_x, true);
         }
     }
 
@@ -1355,7 +1355,7 @@ void render_position_controller() {
         in_edit_y = !in_edit_y;
         if (!in_edit_y) {
             if (selected_idx < IMAGE_COUNT) obstacles[selected_idx].set_position_y(input_y);
-            else robot.set_position_y(input_y);
+            else robot.set_position_y(input_y, true);
         }
     }
 }

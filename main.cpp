@@ -2019,14 +2019,6 @@ class Solver {
             }
         };
 
-        std::vector<std::jthread> sssp_threads;
-
-        for (size_t i = 0; i <= m; i++) {
-            sssp_threads.emplace_back(build_sssp, i);
-        }
-
-        sssp_threads.clear();
-
         auto get_path = [&](int u, int v) -> std::vector<MiniCommand> {
             std::vector<MiniCommand> commands;
             std::vector<int> nodes;

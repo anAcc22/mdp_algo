@@ -265,8 +265,8 @@ class Obstacle {
     float border_thickness                      = BORDER_THICKNESS / Grid::SCALE;
     Direction direction                         = Direction::West;
     DirectedPoint stop_pos                      = { 0.0f, 0.0f, Direction::North };
-    constexpr static float CONE_RADIUS          = 0.45f;
-    constexpr static size_t MAX_CANDIDATE_COUNT = 25uz;
+    constexpr static float CONE_RADIUS          = 0.20f;
+    constexpr static size_t MAX_CANDIDATE_COUNT = 20uz;
     std::vector<DirectedPoint> stop_pos_set{};
 
     void build_stop_pos() {
@@ -364,7 +364,7 @@ class Obstacle {
     static constexpr float BORDER_THICKNESS              = 3.0f;
     static constexpr float OBSTACLE_WIDTH                = 10.0f;
     static constexpr float VIRTUAL_OBSTACLE_BUFFER       = 8.0f;
-    static constexpr float IMAGE_RECOGNITION_DISTANCE    = 10.0f;
+    static constexpr float IMAGE_RECOGNITION_DISTANCE    = 20.0f;
     static constexpr float INDICATOR_RADIUS              = 2.5f;
     static constexpr Color OBSTACLE_BORDER_COLOR         = { 162, 112, 21, 255 };
     static constexpr Color VIRTUAL_OBSTACLE_BORDER_COLOR = { 220, 222, 102, 255 };
@@ -835,21 +835,35 @@ class CircularTurnStep : public Step {
     float circle_angle      = 0.0f;
 
   public:
-    static constexpr float ROTATION_SPEED       = 6.0;
-    static constexpr float TURN_ANGLE_DEGREES   = 90;
-    static constexpr int TURN_BLOCK_COUNT_LEFT  = 4;
-    static constexpr int TURN_BLOCK_COUNT_RIGHT = 6;
-    static constexpr int ARC_SEGMENTS           = 20;
+    static constexpr float ROTATION_SPEED     = 6.0;
+    static constexpr float TURN_ANGLE_DEGREES = 90;
+    static constexpr int TURN_BLOCK_COUNT_FL  = 4;
+    static constexpr int TURN_BLOCK_COUNT_FR  = 8;
+    static constexpr int TURN_BLOCK_COUNT_BL  = 4;
+    static constexpr int TURN_BLOCK_COUNT_BR  = 8;
+    static constexpr int ARC_SEGMENTS         = 20;
 
-    const float turn_radius{};
+    float turn_radius{};
 
     CircularTurnStep(Instruction instruction)
-        : instruction(instruction)
-        , turn_radius(
-              (instruction == Instruction::ForwardLeft || instruction == Instruction::BackwardRight
-                   ? TURN_BLOCK_COUNT_LEFT
-                   : TURN_BLOCK_COUNT_RIGHT)
-              * grid.block_size) {}
+        : instruction(instruction) {
+        float base_radius{};
+
+        switch (instruction) {
+            case Instruction::ForwardLeft:
+                base_radius = TURN_BLOCK_COUNT_FL;
+            case Instruction::ForwardRight:
+                base_radius = TURN_BLOCK_COUNT_FR;
+            case Instruction::BackwardLeft:
+                base_radius = TURN_BLOCK_COUNT_BL;
+            case Instruction::BackwardRight:
+                base_radius = TURN_BLOCK_COUNT_BR;
+            default:
+                break;
+        }
+
+        turn_radius = base_radius * grid.block_size;
+    }
 
     std::string serialize() override {
         std::string prefix = get_prefix(instruction);
@@ -1500,11 +1514,22 @@ class Solver {
         };
 
         for (auto instruction : instructions) {
-            float turn_radius
-                = ((instruction == Instruction::ForwardLeft || instruction == Instruction::BackwardRight
-                        ? CircularTurnStep::TURN_BLOCK_COUNT_LEFT
-                        : CircularTurnStep::TURN_BLOCK_COUNT_RIGHT)
-                   * grid.block_size);
+            float base_radius{};
+
+            switch (instruction) {
+                case Instruction::ForwardLeft:
+                    base_radius = CircularTurnStep::TURN_BLOCK_COUNT_FL;
+                case Instruction::ForwardRight:
+                    base_radius = CircularTurnStep::TURN_BLOCK_COUNT_FR;
+                case Instruction::BackwardLeft:
+                    base_radius = CircularTurnStep::TURN_BLOCK_COUNT_BL;
+                case Instruction::BackwardRight:
+                    base_radius = CircularTurnStep::TURN_BLOCK_COUNT_BR;
+                default:
+                    break;
+            }
+
+            float turn_radius = base_radius * grid.block_size;
 
             Vector2 circle_center = { 0.0f, 0.0f };
             float circle_angle    = 0.0f;

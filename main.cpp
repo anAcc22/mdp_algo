@@ -852,12 +852,16 @@ class CircularTurnStep : public Step {
         switch (instruction) {
             case Instruction::ForwardLeft:
                 base_radius = TURN_BLOCK_COUNT_FL;
+                break;
             case Instruction::ForwardRight:
                 base_radius = TURN_BLOCK_COUNT_FR;
+                break;
             case Instruction::BackwardLeft:
                 base_radius = TURN_BLOCK_COUNT_BL;
+                break;
             case Instruction::BackwardRight:
                 base_radius = TURN_BLOCK_COUNT_BR;
+                break;
             default:
                 break;
         }
@@ -1514,17 +1518,23 @@ class Solver {
         };
 
         for (auto instruction : instructions) {
+            if (instruction == Instruction::BackwardRight) continue;
+
             float base_radius{};
 
             switch (instruction) {
                 case Instruction::ForwardLeft:
                     base_radius = CircularTurnStep::TURN_BLOCK_COUNT_FL;
+                    break;
                 case Instruction::ForwardRight:
                     base_radius = CircularTurnStep::TURN_BLOCK_COUNT_FR;
+                    break;
                 case Instruction::BackwardLeft:
                     base_radius = CircularTurnStep::TURN_BLOCK_COUNT_BL;
+                    break;
                 case Instruction::BackwardRight:
                     base_radius = CircularTurnStep::TURN_BLOCK_COUNT_BR;
+                    break;
                 default:
                     break;
             }
